@@ -199,66 +199,92 @@ public class MainActivity extends Activity {
         });
     }
 
-    // ---------- виджет (Яндекс Музыка) ----------
-    private static final int REQ_BIND = 501, REQ_CFG = 502;
+    // ---------- виджеты (Яндекс Музыка, 2ГИС) ----------
+    private static final class Slot {
+        final String prefKey, title;
+        final int reqBind, reqCfg;
+        final String[] hints;
+        FrameLayout box;
+        View add, rm;
+        int pendingId = -1;
+
+        Slot(String prefKey, String title, int reqBind, int reqCfg, String... hints) {
+            this.prefKey = prefKey; this.title = title;
+            this.reqBind = reqBind; this.reqCfg = reqCfg; this.hints = hints;
+        }
+
+        boolean matches(String pkg) {
+            String p = pkg.toLowerCase(Locale.ROOT);
+            for (String h : hints) if (p.contains(h)) return true;
+            return false;
+        }
+    }
+
     private AppWidgetManager awm;
     private AppWidgetHost widgetHost;
-    private int pendingId = -1;
-    private ComponentName pendingProvider;
+    private Slot[] slots;
 
     private void setupWidget() {
         awm = AppWidgetManager.getInstance(this);
         widgetHost = new AppWidgetHost(this, 1024);
-        findViewById(R.id.widget_add).setOnClickListener(v -> pickWidget());
-        findViewById(R.id.widget_remove).setOnClickListener(v -> {
-            int id = prefs.getInt("widget_id", -1);
-            if (id != -1) { try { widgetHost.deleteAppWidgetId(id); } catch (Throwable ignore) {} }
-            prefs.edit().remove("widget_id").apply();
-            showWidget();
-        });
-        showWidget();
+        slots = new Slot[]{
+                new Slot("widget_id", "Яндекс Музыки", 501, 502, "yandex.music", "music.yandex", "yandex.mus"),
+                new Slot("widget2_id", "2ГИС", 503, 504, "dublgis", "2gis")
+        };
+        int[][] ids = {
+                {R.id.widget_host, R.id.widget_add, R.id.widget_remove},
+                {R.id.widget2_host, R.id.widget2_add, R.id.widget2_remove}
+        };
+        for (int i = 0; i < slots.length; i++) {
+            final Slot s = slots[i];
+            s.box = findViewById(ids[i][0]);
+            s.add = findViewById(ids[i][1]);
+            s.rm = findViewById(ids[i][2]);
+            s.add.setOnClickListener(v -> pickWidget(s));
+            s.rm.setOnClickListener(v -> {
+                int id = prefs.getInt(s.prefKey, -1);
+                if (id != -1) { try { widgetHost.deleteAppWidgetId(id); } catch (Throwable ignore) {} }
+                prefs.edit().remove(s.prefKey).apply();
+                showWidget(s);
+            });
+            showWidget(s);
+        }
     }
 
-    private void showWidget() {
-        FrameLayout hostBox = findViewById(R.id.widget_host);
-        View add = findViewById(R.id.widget_add);
-        View rm = findViewById(R.id.widget_remove);
-        hostBox.removeAllViews();
-        int id = prefs.getInt("widget_id", -1);
+    private void showWidget(final Slot s) {
+        s.box.removeAllViews();
+        int id = prefs.getInt(s.prefKey, -1);
         AppWidgetProviderInfo info = id == -1 ? null : awm.getAppWidgetInfo(id);
         if (info == null) {
-            add.setVisibility(View.VISIBLE);
-            rm.setVisibility(View.GONE);
+            s.add.setVisibility(View.VISIBLE);
+            s.rm.setVisibility(View.GONE);
             return;
         }
         try {
-            AppWidgetHostView hv = widgetHost.createView(this, id, info);
+            final AppWidgetHostView hv = widgetHost.createView(this, id, info);
             hv.setAppWidget(id, info);
-            hostBox.addView(hv, new FrameLayout.LayoutParams(-1, -1));
+            s.box.addView(hv, new FrameLayout.LayoutParams(-1, -1));
             hv.post(() -> {
                 float d = getResources().getDisplayMetrics().density;
-                int w = Math.round(hostBox.getWidth() / d), hgt = Math.round(hostBox.getHeight() / d);
+                int w = Math.round(s.box.getWidth() / d), hgt = Math.round(s.box.getHeight() / d);
                 try { hv.updateAppWidgetSize(null, w, hgt, w, hgt); } catch (Throwable ignore) {}
             });
-            add.setVisibility(View.GONE);
-            rm.setVisibility(View.VISIBLE);
+            s.add.setVisibility(View.GONE);
+            s.rm.setVisibility(View.VISIBLE);
         } catch (Throwable t) {
-            prefs.edit().remove("widget_id").apply();
-            add.setVisibility(View.VISIBLE);
-            rm.setVisibility(View.GONE);
+            prefs.edit().remove(s.prefKey).apply();
+            s.add.setVisibility(View.VISIBLE);
+            s.rm.setVisibility(View.GONE);
         }
     }
 
-    private void pickWidget() {
+    private void pickWidget(final Slot s) {
         final PackageManager pm = getPackageManager();
         final List<AppWidgetProviderInfo> all = awm.getInstalledProviders();
-        final List<AppWidgetProviderInfo> music = new ArrayList<>();
-        for (AppWidgetProviderInfo i : all) {
-            String p = i.provider.getPackageName().toLowerCase(Locale.ROOT);
-            if (p.contains("yandex") && (p.contains("music") || p.contains("mus"))) music.add(i);
-        }
-        final boolean found = !music.isEmpty();
-        final List<AppWidgetProviderInfo> list = found ? music : all;
+        final List<AppWidgetProviderInfo> hit = new ArrayList<>();
+        for (AppWidgetProviderInfo i : all) if (s.matches(i.provider.getPackageName())) hit.add(i);
+        final boolean found = !hit.isEmpty();
+        final List<AppWidgetProviderInfo> list = found ? hit : all;
         if (list.isEmpty()) {
             Toast.makeText(this, "На магнитоле нет ни одного виджета", Toast.LENGTH_LONG).show();
             return;
@@ -272,61 +298,65 @@ public class MainActivity extends Activity {
             names[i] = app + " — " + w.loadLabel(pm);
         }
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(found ? "Виджет Яндекс Музыки" : "Яндекс Музыка не найдена — выберите любой виджет")
-                .setItems(names, (d, which) -> bindWidget(list.get(which).provider))
+                .setTitle(found ? "Виджет " + s.title : s.title + " не найдены — выберите любой виджет")
+                .setItems(names, (d, which) -> bindWidget(s, list.get(which).provider))
                 .setNegativeButton("Отмена", null)
                 .show();
     }
 
-    private void bindWidget(ComponentName provider) {
+    private void bindWidget(Slot s, ComponentName provider) {
         int id = widgetHost.allocateAppWidgetId();
         boolean ok = false;
         try { ok = awm.bindAppWidgetIdIfAllowed(id, provider); } catch (Throwable ignore) {}
         if (ok) {
-            afterBind(id);
+            afterBind(s, id);
         } else {
-            pendingId = id;
-            pendingProvider = provider;
+            s.pendingId = id;
             Intent i = new Intent(AppWidgetManager.ACTION_APPWIDGET_BIND);
             i.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id);
             i.putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider);
             try {
-                startActivityForResult(i, REQ_BIND);
+                startActivityForResult(i, s.reqBind);
             } catch (Throwable t) {
                 widgetHost.deleteAppWidgetId(id);
+                s.pendingId = -1;
                 Toast.makeText(this, "Система не разрешила добавить виджет", Toast.LENGTH_LONG).show();
             }
         }
     }
 
-    private void afterBind(int id) {
+    private void afterBind(Slot s, int id) {
         AppWidgetProviderInfo info = awm.getAppWidgetInfo(id);
         if (info != null && info.configure != null) {
             try {
-                widgetHost.startAppWidgetConfigureActivityForResult(this, id, 0, REQ_CFG, null);
-                pendingId = id;
+                s.pendingId = id;
+                widgetHost.startAppWidgetConfigureActivityForResult(this, id, 0, s.reqCfg, null);
                 return;
             } catch (Throwable ignore) { /* без настройки */ }
         }
-        saveWidget(id);
+        saveWidget(s, id);
     }
 
-    private void saveWidget(int id) {
-        int old = prefs.getInt("widget_id", -1);
+    private void saveWidget(Slot s, int id) {
+        int old = prefs.getInt(s.prefKey, -1);
         if (old != -1 && old != id) { try { widgetHost.deleteAppWidgetId(old); } catch (Throwable ignore) {} }
-        prefs.edit().putInt("widget_id", id).apply();
-        showWidget();
+        s.pendingId = -1;
+        prefs.edit().putInt(s.prefKey, id).apply();
+        showWidget(s);
     }
 
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
-        if (req == REQ_BIND) {
-            if (res == RESULT_OK && pendingId != -1) afterBind(pendingId);
-            else if (pendingId != -1) { widgetHost.deleteAppWidgetId(pendingId); pendingId = -1; }
-        } else if (req == REQ_CFG) {
-            if (res == RESULT_OK && pendingId != -1) saveWidget(pendingId);
-            else if (pendingId != -1) { widgetHost.deleteAppWidgetId(pendingId); pendingId = -1; }
+        if (slots == null) return;
+        for (Slot s : slots) {
+            if (req == s.reqBind) {
+                if (res == RESULT_OK && s.pendingId != -1) afterBind(s, s.pendingId);
+                else if (s.pendingId != -1) { widgetHost.deleteAppWidgetId(s.pendingId); s.pendingId = -1; }
+            } else if (req == s.reqCfg) {
+                if (res == RESULT_OK && s.pendingId != -1) saveWidget(s, s.pendingId);
+                else if (s.pendingId != -1) { widgetHost.deleteAppWidgetId(s.pendingId); s.pendingId = -1; }
+            }
         }
     }
 
