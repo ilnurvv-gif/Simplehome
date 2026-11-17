@@ -130,6 +130,7 @@ public class MainActivity extends Activity {
         volBar = findViewById(R.id.vol);
         bassBtn = findViewById(R.id.btn_bass);
         bassMode = prefs.getInt("bass_mode", 0);
+        if (bassMode == 2) bassMode = 1; // старый «BASS+» больше нет
         eqCustom = loadEq();
         if (bassMode != 0) {
             String r = BassController.apply(bassMode, eqCustom);
@@ -137,7 +138,7 @@ public class MainActivity extends Activity {
         }
         paintBass();
         bassBtn.setOnClickListener(v -> {
-            int next = bassMode == 3 ? 0 : (bassMode + 1) % 3; // 0 -> 1 -> 2 -> 0
+            int next = bassMode == 0 ? 1 : 0; // выкл <-> BASS
             String r = BassController.apply(next, eqCustom);
             if (next != 0 && r.isEmpty()) {
                 Toast.makeText(this, "Эта магнитола не пускает аудиоэффекты в лаунчер", Toast.LENGTH_LONG).show();
@@ -181,7 +182,7 @@ public class MainActivity extends Activity {
     private void paintBass() {
         boolean on = bassMode != 0;
         bassBtn.setBackgroundResource(on ? R.drawable.bass_on : R.drawable.bass_off);
-        bassBtn.setText(bassMode == 1 ? "BASS" : bassMode == 2 ? "BASS +" : bassMode == 3 ? "EQ" : "BASS");
+        bassBtn.setText(bassMode == 3 ? "EQ" : "BASS");
         bassBtn.setAlpha(on ? 1f : 0.85f);
     }
 

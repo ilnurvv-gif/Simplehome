@@ -6,13 +6,13 @@ import android.media.audiofx.LoudnessEnhancer;
 
 /**
  * Глобальная обработка звука (audio session 0).
- * Режимы: 0 выкл, 1 BASS, 2 BASS+, 3 свой эквалайзер.
+ * Режимы: 0 выкл, 1 BASS, 3 свой эквалайзер.
  * Чтобы музыка не становилась тише, поднимаем низы умеренно (а не в потолок),
  * чуть приподнимаем верх (V-образная кривая, чёткость) и добавляем LoudnessEnhancer,
  * который возвращает громкость и защищает от клиппинга.
  */
 public final class BassController {
-    public static final int OFF = 0, BASS = 1, BASS_PLUS = 2, CUSTOM = 3;
+    public static final int OFF = 0, BASS = 1, CUSTOM = 3;
 
     private static BassBoost boost;
     private static Equalizer eq;
@@ -20,20 +20,13 @@ public final class BassController {
 
     private BassController() {}
 
-    /** Усиление полосы в дБ для пресета. */
-    private static float presetDb(int mode, int hz) {
-        if (mode == BASS) {
-            if (hz < 100) return 6f;
-            if (hz < 300) return 3.5f;
-            if (hz < 1500) return -1f;
-            if (hz < 6000) return 1f;
-            return 2f;
-        }
-        if (hz < 100) return 9.5f;
-        if (hz < 300) return 5.5f;
-        if (hz < 1500) return -1.5f;
-        if (hz < 6000) return 1.5f;
-        return 3f;
+    /** Усиление полосы в дБ: мягкие, «приятные» низы и лёгкий подъём верха для чёткости. */
+    private static float presetDb(int hz) {
+        if (hz < 100) return 4.5f;
+        if (hz < 300) return 3f;
+        if (hz < 1500) return 0f;
+        if (hz < 6000) return 0.5f;
+        return 1.5f;
     }
 
     /**
@@ -53,7 +46,7 @@ public final class BassController {
                 if (mode == CUSTOM && custom != null && b < custom.length) {
                     mb = custom[b];
                 } else {
-                    mb = Math.round(presetDb(mode, eq.getCenterFreq(b) / 1000) * 100f);
+                    mb = Math.round(presetDb(eq.getCenterFreq(b) / 1000) * 100f);
                 }
                 mb = Math.max(r[0], Math.min(r[1], mb));
                 eq.setBandLevel(b, (short) mb);
@@ -67,7 +60,7 @@ public final class BassController {
         if (mode != CUSTOM) {
             try {
                 boost = new BassBoost(1000, 0);
-                if (boost.getStrengthSupported()) boost.setStrength((short) (mode == BASS ? 450 : 750));
+                if (boost.getStrengthSupported()) boost.setStrength((short) 300);
                 boost.setEnabled(true);
                 ok.append("BassBoost ");
             } catch (Throwable t) {
@@ -77,7 +70,7 @@ public final class BassController {
         }
         try {
             loud = new LoudnessEnhancer(0);
-            loud.setTargetGain(mode == BASS ? 500 : mode == BASS_PLUS ? 800 : 300); // мБ
+            loud.setTargetGain(mode == BASS ? 650 : 300); // мБ: возвращает громкость, съеденную подъёмом низов
             loud.setEnabled(true);
             ok.append("Loudness ");
         } catch (Throwable t) {
