@@ -120,7 +120,7 @@ public class MainActivity extends Activity implements TrackerService.Listener {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, (int) dp(12), 0, 0);
         btnStart = button("СТАРТ", v -> toggle());
-        btnUpdate = button("Обновить базу", v -> updateBase());
+        btnUpdate = button("База камер…", v -> baseMenu());
         TextView add = button("+ Камера здесь", v -> addHere());
         btnSound = button("", v -> {
             prefs.edit().putBoolean("sound", !prefs.getBoolean("sound", true)).apply();
@@ -158,7 +158,7 @@ public class MainActivity extends Activity implements TrackerService.Listener {
 
     private void startTracker() {
         if (CameraDb.load(this).isEmpty()) {
-            Toast.makeText(this, "База пуста: нажмите «Обновить базу» (нужен интернет)", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "База пуста: нажмите «База камер…»", Toast.LENGTH_LONG).show();
         }
         Intent i = new Intent(this, TrackerService.class);
         try {
@@ -178,6 +178,85 @@ public class MainActivity extends Activity implements TrackerService.Listener {
         }
     }
 
+    private void baseMenu() {
+        String[] items = {"Загрузить из файла (CSV / txt с камерами)", "Загрузить по ссылке", "Скачать из OpenStreetMap"};
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("База камер")
+                .setItems(items, (d, w) -> {
+                    if (w == 0) pickFile();
+                    else if (w == 1) askUrl();
+                    else updateBase();
+                })
+                .setNegativeButton("Отмена", null).show();
+    }
+
+    private void pickFile() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        try { startActivityForResult(i, 11); }
+        catch (Throwable t) { Toast.makeText(this, "На магнитоле нет выбора файлов. Используйте загрузку по ссылке", Toast.LENGTH_LONG).show(); }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != 11 || res != RESULT_OK || data == null || data.getData() == null) return;
+        final Uri uri = data.getData();
+        runImport(() -> {
+            try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192]; int n;
+                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                String txt;
+                try { txt = bo.toString("UTF-8"); } catch (Exception e) { txt = bo.toString("windows-1251"); }
+                return CameraDb.importText(this, txt);
+            }
+        });
+    }
+
+    private void askUrl() {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setHint("https://…  (ссылка на файл базы)");
+        et.setText(prefs.getString("base_url", ""));
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Ссылка на файл базы")
+                .setMessage("Ссылка на CSV/txt с камерами (формат «долгота,широта,…»). Берутся только камеры Башкортостана.")
+                .setView(et)
+                .setPositiveButton("Скачать", (d, w) -> {
+                    final String u = et.getText().toString().trim();
+                    if (u.isEmpty()) return;
+                    prefs.edit().putString("base_url", u).apply();
+                    runImport(() -> CameraDb.importFromUrl(this, u));
+                })
+                .setNegativeButton("Отмена", null).show();
+    }
+
+    private interface Job { int run() throws Exception; }
+
+    private void runImport(final Job job) {
+        btnUpdate.setText("Загрузка…");
+        btnUpdate.setEnabled(false);
+        new Thread(() -> {
+            String msg;
+            try {
+                int n = job.run();
+                prefs.edit().putLong("osm_time", System.currentTimeMillis()).apply();
+                msg = "Загружено камер: " + n;
+            } catch (Exception e) {
+                msg = "Не удалось: " + e.getMessage();
+            }
+            final String m = msg;
+            runOnUiThread(() -> {
+                btnUpdate.setText("База камер…");
+                btnUpdate.setEnabled(true);
+                Toast.makeText(this, m, Toast.LENGTH_LONG).show();
+                refreshBaseInfo();
+                if (TrackerService.STATE.running) startTracker();
+            });
+        }).start();
+    }
+
     private void updateBase() {
         btnUpdate.setText("Загрузка…");
         btnUpdate.setEnabled(false);
@@ -192,7 +271,7 @@ public class MainActivity extends Activity implements TrackerService.Listener {
             }
             final String m = msg;
             runOnUiThread(() -> {
-                btnUpdate.setText("Обновить базу");
+                btnUpdate.setText("База камер…");
                 btnUpdate.setEnabled(true);
                 Toast.makeText(this, m, Toast.LENGTH_LONG).show();
                 refreshBaseInfo();
@@ -230,8 +309,9 @@ public class MainActivity extends Activity implements TrackerService.Listener {
         int all = CameraDb.load(this).size(), mine = CameraDb.countUser(this);
         long t = prefs.getLong("osm_time", 0);
         String when = t == 0 ? "ещё не загружалась" : "обновлена " + new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(new Date(t));
-        baseInfo.setText("База: " + all + " камер (из них ваших " + mine + "), " + when
-                + ".  Данные OpenStreetMap © участники, ODbL. База может быть неполной.");
+        int ext = CameraDb.countExt(this);
+        baseInfo.setText("База: " + all + " камер (ваших " + mine + ", из файла " + ext + "), " + when
+                + ".  OpenStreetMap © участники, ODbL. База может быть неполной.");
     }
 
     @Override

@@ -26,22 +26,98 @@ import java.util.List;
 public final class CameraDb {
     private static final String OSM_FILE = "cameras_osm.json";
     private static final String USER_FILE = "cameras_user.json";
+    private static final String EXT_FILE = "cameras_ext.json";
     private static final String[] ENDPOINTS = {
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",   // российское зеркало
             "https://overpass-api.de/api/interpreter",
+            "https://overpass.private.coffee/api/interpreter",
             "https://overpass.kumi.systems/api/interpreter"
     };
-    // area RU-BA = Республика Башкортостан
+    // прямоугольник вокруг Республики Башкортостан (юг, запад, север, восток) + небольшой запас
+    private static final double S = 49.8, W = 52.0, N = 58.0, E = 61.5;
     private static final String QUERY =
-            "[out:json][timeout:90];area[\"ISO3166-2\"=\"RU-BA\"]->.a;"
-                    + "(node(area.a)[\"highway\"=\"speed_camera\"];node(area.a)[\"enforcement\"=\"maxspeed\"];);out body;";
+            "[out:json][timeout:60];(node[\"highway\"=\"speed_camera\"](" + S + "," + W + "," + N + "," + E + ");"
+                    + "node[\"enforcement\"=\"maxspeed\"](" + S + "," + W + "," + N + "," + E + "););out body;";
 
     private CameraDb() {}
 
     public static List<Camera> load(Context c) {
+        List<Camera> all = new ArrayList<>();
+        readFile(new File(c.getFilesDir(), USER_FILE), true, all);
+        readFile(new File(c.getFilesDir(), EXT_FILE), false, all);
+        readFile(new File(c.getFilesDir(), OSM_FILE), false, all);
+        // убираем дубли (камеры ближе 40 м друг к другу), ваши добавлены первыми и остаются
         List<Camera> r = new ArrayList<>();
-        readFile(new File(c.getFilesDir(), OSM_FILE), false, r);
-        readFile(new File(c.getFilesDir(), USER_FILE), true, r);
+        for (Camera c1 : all) {
+            boolean dup = false;
+            for (Camera c2 : r) {
+                if (Math.abs(c1.lat - c2.lat) < 0.0004 && Math.abs(c1.lon - c2.lon) < 0.0007) { dup = true; break; }
+            }
+            if (!dup) r.add(c1);
+        }
         return r;
+    }
+
+    public static int countExt(Context c) {
+        List<Camera> r = new ArrayList<>();
+        readFile(new File(c.getFilesDir(), EXT_FILE), false, r);
+        return r.size();
+    }
+
+    /**
+     * Разбор базы из файла популярных форматов (PocketGPS CSV, Navitel speedcam.txt, просто «долгота,широта,...»).
+     * Берёт только камеры в районе Башкортостана. @return сколько камер сохранено
+     */
+    public static int importText(Context c, String text) throws Exception {
+        java.util.regex.Pattern num = java.util.regex.Pattern.compile("-?\\d{1,3}\\.\\d{3,}");
+        List<double[]> pairs = new ArrayList<>();   // {a, b, speed}
+        int okAB = 0, okBA = 0;
+        for (String line : text.split("\\r?\\n")) {
+            java.util.regex.Matcher m = num.matcher(line);
+            if (!m.find()) continue;
+            double a = Double.parseDouble(m.group());
+            if (!m.find()) continue;
+            double b = Double.parseDouble(m.group());
+            int end = m.end();
+            int limit = 0;
+            for (String fld : line.substring(end).split("[,;\\t]")) {
+                String s = fld.trim().replace("\"", "");
+                if (s.matches("\\d{2,3}")) {
+                    int v = Integer.parseInt(s);
+                    if (v >= 20 && v <= 130 && v % 10 == 0) { limit = v; break; }
+                }
+            }
+            if (limit == 0) {
+                java.util.regex.Matcher km = java.util.regex.Pattern.compile("(\\d{2,3})\\s*(км|km)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(line.substring(end));
+                if (km.find()) {
+                    int v = Integer.parseInt(km.group(1));
+                    if (v >= 20 && v <= 130) limit = v;
+                }
+            }
+            if (inBox(b, a)) okAB++;      // порядок «долгота, широта»
+            if (inBox(a, b)) okBA++;      // порядок «широта, долгота»
+            pairs.add(new double[]{a, b, limit});
+        }
+        if (pairs.isEmpty()) throw new Exception("В файле не нашлось координат");
+        boolean lonLat = okAB >= okBA;
+        JSONArray out = new JSONArray();
+        for (double[] p : pairs) {
+            double lon = lonLat ? p[0] : p[1], lat = lonLat ? p[1] : p[0];
+            if (!inBox(lat, lon)) continue;
+            out.put(toJson(new Camera(lat, lon, (int) p[2], -1, false)));
+        }
+        if (out.length() == 0) throw new Exception("В файле нет камер Башкортостана (всего строк: " + pairs.size() + ")");
+        writeFile(new File(c.getFilesDir(), EXT_FILE), out.toString());
+        return out.length();
+    }
+
+    private static boolean inBox(double lat, double lon) {
+        return lat >= S && lat <= N && lon >= W && lon <= E;
+    }
+
+    /** Скачивает файл базы по ссылке (ссылку выбирает пользователь) и импортирует. */
+    public static int importFromUrl(Context c, String url) throws Exception {
+        return importText(c, http(url));
     }
 
     public static int countUser(Context c) {
@@ -88,7 +164,7 @@ public final class CameraDb {
                 last = ex;
             }
         }
-        throw last != null ? last : new Exception("Нет связи");
+        throw new Exception("не удалось связаться ни с одним сервером OpenStreetMap (" + (last != null ? last.getMessage() : "нет связи") + ")");
     }
 
     private static int parseInt(String s) {
@@ -139,7 +215,8 @@ public final class CameraDb {
     private static String http(String url) throws Exception {
         HttpURLConnection h = (HttpURLConnection) new URL(url).openConnection();
         h.setConnectTimeout(15000);
-        h.setReadTimeout(120000);
+        h.setReadTimeout(60000);
+        h.setInstanceFollowRedirects(true);
         h.setRequestProperty("User-Agent", "AntiRadarRB/1.0 (Android head unit)");
         try {
             if (h.getResponseCode() != 200) throw new Exception("HTTP " + h.getResponseCode());
