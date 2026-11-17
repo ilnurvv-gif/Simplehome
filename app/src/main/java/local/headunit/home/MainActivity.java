@@ -10,6 +10,13 @@ import android.content.ComponentName;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Rect;
+import android.widget.EditText;
+import android.view.MotionEvent;
+import android.view.GestureDetector;
+import android.net.NetworkCapabilities;
+import android.net.Network;
+import android.net.ConnectivityManager;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -62,6 +69,7 @@ public class MainActivity extends Activity {
         @Override
         public void run() {
             updateGreeting();
+            paintVpn();
             handler.postDelayed(this, 30000);
         }
     };
@@ -102,7 +110,7 @@ public class MainActivity extends Activity {
         });
 
         findViewById(R.id.pill_wifi).setOnClickListener(v -> safeStart(Settings.ACTION_WIFI_SETTINGS));
-        findViewById(R.id.pill_vpn).setOnClickListener(v -> safeStart(Settings.ACTION_VPN_SETTINGS));
+        setupVpn();
         findViewById(R.id.btn_bt).setOnClickListener(v -> safeStart(Settings.ACTION_BLUETOOTH_SETTINGS));
         findViewById(R.id.btn_settings).setOnClickListener(v -> safeStart(Settings.ACTION_SETTINGS));
         findViewById(R.id.btn_apps).setOnClickListener(v ->
@@ -184,19 +192,102 @@ public class MainActivity extends Activity {
         final View hit = findViewById(R.id.logo_hit);
         hit.setOnClickListener(v ->
                 drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int w = r - l, h = b - t;
-            if (w <= 0 || h <= 0) return;
-            float s = Math.max(w / 1600f, h / 960f);
-            int bw = Math.round(250 * s), bh = Math.round(135 * s);
-            int cx = Math.round(w / 2f + (158 - 800) * s), cy = Math.round(h / 2f + (847 - 480) * s);
-            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) hit.getLayoutParams();
-            int nl = Math.max(0, cx - bw / 2), nt = Math.max(0, cy - bh / 2);
-            if (lp.width != bw || lp.height != bh || lp.leftMargin != nl || lp.topMargin != nt) {
-                lp.width = bw; lp.height = bh; lp.leftMargin = nl; lp.topMargin = nt;
-                hit.setLayoutParams(lp);
+        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLogoHit());
+    }
+
+    private void placeLogoHit() {
+        View root = findViewById(R.id.root);
+        View hit = findViewById(R.id.logo_hit);
+        int w = root.getWidth(), h = root.getHeight();
+        if (w <= 0 || h <= 0) return;
+        float[] g = LOGO[bgIndex];
+        float s = Math.max(w / 1600f, h / 960f);
+        int bw = Math.round(g[2] * s), bh = Math.round(g[3] * s);
+        int cx = Math.round(w / 2f + (g[0] - 800) * s), cy = Math.round(h / 2f + (g[1] - 480) * s);
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) hit.getLayoutParams();
+        int nl = Math.max(0, cx - bw / 2), nt = Math.max(0, cy - bh / 2);
+        if (lp.width != bw || lp.height != bh || lp.leftMargin != nl || lp.topMargin != nt) {
+            lp.width = bw; lp.height = bh; lp.leftMargin = nl; lp.topMargin = nt;
+            hit.setLayoutParams(lp);
+        }
+    }
+
+    // ---------- VPN (Amnezia) ----------
+    private static final String PKG_AWG = "org.amnezia.awg";   // AmneziaWG: умеет внешнее управление
+    private static final String PKG_AMN = "org.amnezia.vpn";   // Amnezia VPN: внешнего управления нет
+    private TextView pillVpn;
+
+    private void setupVpn() {
+        pillVpn = findViewById(R.id.pill_vpn);
+        pillVpn.setOnClickListener(v -> toggleVpn());
+        pillVpn.setOnLongClickListener(v -> { safeStart(Settings.ACTION_VPN_SETTINGS); return true; });
+        paintVpn();
+    }
+
+    private boolean vpnActive() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            for (Network n : cm.getAllNetworks()) {
+                NetworkCapabilities c = cm.getNetworkCapabilities(n);
+                if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true;
             }
-        });
+        } catch (Throwable ignore) { }
+        return false;
+    }
+
+    private void paintVpn() {
+        if (pillVpn == null) return;
+        boolean on = vpnActive();
+        pillVpn.setBackgroundResource(on ? R.drawable.bass_on : R.drawable.pill_bg);
+        pillVpn.setText(on ? "VPN ON" : "VPN");
+    }
+
+    private boolean installed(String pkg) {
+        try { getPackageManager().getPackageInfo(pkg, 0); return true; } catch (Exception e) { return false; }
+    }
+
+    private void toggleVpn() {
+        final boolean on = vpnActive();
+        if (installed(PKG_AWG)) {
+            String tunnel = prefs.getString("awg_tunnel", "");
+            if (tunnel.isEmpty()) {
+                final EditText et = new EditText(this);
+                et.setHint("имя туннеля в AmneziaWG");
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("Имя туннеля")
+                        .setMessage("Введите имя туннеля из AmneziaWG. В её настройках должно быть включено «Разрешить управление из других приложений».")
+                        .setView(et)
+                        .setPositiveButton("OK", (d, w) -> {
+                            String n = et.getText().toString().trim();
+                            if (!n.isEmpty()) { prefs.edit().putString("awg_tunnel", n).apply(); sendAwg(n, !vpnActive()); }
+                        })
+                        .setNegativeButton("Отмена", null).show();
+            } else {
+                sendAwg(tunnel, !on);
+            }
+        } else if (installed(PKG_AMN)) {
+            Intent i = getPackageManager().getLaunchIntentForPackage(PKG_AMN);
+            if (i != null) {
+                Toast.makeText(this, on ? "Откройте Amnezia и нажмите «Отключить»" : "Откройте Amnezia и нажмите «Подключить»", Toast.LENGTH_LONG).show();
+                try { startActivity(i); } catch (Throwable ignore) { }
+            }
+        } else {
+            Toast.makeText(this, "Amnezia не установлена", Toast.LENGTH_LONG).show();
+        }
+        handler.postDelayed(this::paintVpn, 2500);
+        handler.postDelayed(this::paintVpn, 6000);
+    }
+
+    private void sendAwg(String tunnel, boolean up) {
+        Intent i = new Intent(up ? PKG_AWG + ".action.SET_TUNNEL_UP" : PKG_AWG + ".action.SET_TUNNEL_DOWN");
+        i.setPackage(PKG_AWG);
+        i.putExtra("tunnel", tunnel);
+        try {
+            sendBroadcast(i);
+            Toast.makeText(this, (up ? "Подключаю " : "Отключаю ") + tunnel, Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "Не удалось отправить команду в AmneziaWG", Toast.LENGTH_LONG).show();
+        }
     }
 
     // ---------- виджеты (Яндекс Музыка, 2ГИС) ----------
@@ -372,19 +463,71 @@ public class MainActivity extends Activity {
         super.onStop();
     }
 
+    // ---------- фоны: свайп влево/вправо меняет картинку ----------
+    private static final int[] RAW = {R.raw.bg_desert, R.raw.bg_snow, R.raw.bg_city};
+    private static final int[] POSTER = {R.drawable.poster_desert, R.drawable.poster_snow, R.drawable.poster_city};
+    // кнопка «все приложения» на картинке: центр x, y и размер (в координатах видео 1600x960)
+    private static final float[][] LOGO = {{158, 847, 250, 135}, {159, 853, 250, 135}, {568, 237, 190, 110}};
+    private int bgIndex;
+    private GestureDetector swipe;
+
     private void setupVideo() {
-        video.setSource(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.bg),
+        bgIndex = Math.max(0, Math.min(RAW.length - 1, prefs.getInt("bg_index", 0)));
+        poster.setImageResource(POSTER[bgIndex]);
+        startVideo();
+        swipe = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
+                if (e1 == null || e2 == null) return false;
+                float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
+                if (Math.abs(dx) < 140 || Math.abs(dx) < 2f * Math.abs(dy) || Math.abs(vx) < 300) return false;
+                if (drawer.getVisibility() == View.VISIBLE) return false;
+                int[] busy = {R.id.widget_slot, R.id.widget2_slot, R.id.vol, R.id.dock};
+                for (int id : busy) if (hit(findViewById(id), e1)) return false;
+                changeBackground(dx < 0 ? 1 : -1);
+                return true;
+            }
+        });
+    }
+
+    private boolean hit(View v, MotionEvent e) {
+        if (v == null || v.getVisibility() != View.VISIBLE) return false;
+        Rect r = new Rect();
+        if (!v.getGlobalVisibleRect(r)) return false;
+        return r.contains((int) e.getRawX(), (int) e.getRawY());
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (swipe != null) swipe.onTouchEvent(ev);
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private void changeBackground(int dir) {
+        bgIndex = (bgIndex + dir + RAW.length) % RAW.length;
+        prefs.edit().putInt("bg_index", bgIndex).apply();
+        poster.setImageResource(POSTER[bgIndex]);
+        poster.setAlpha(0f);
+        poster.setVisibility(View.VISIBLE);
+        poster.animate().alpha(1f).setDuration(220).withEndAction(this::startVideo).start();
+        placeLogoHit();
+    }
+
+    private void startVideo() {
+        video.setSource(Uri.parse("android.resource://" + getPackageName() + "/" + RAW[bgIndex]),
                 new FillVideoView.Callback() {
                     @Override
                     public void onFirstFrame() {
-                        runOnUiThread(() -> poster.setVisibility(View.GONE));
+                        runOnUiThread(() -> poster.animate().alpha(0f).setDuration(250)
+                                .withEndAction(() -> poster.setVisibility(View.GONE)).start());
                     }
 
                     @Override
                     public void onFailed() {
-                        runOnUiThread(() -> poster.setVisibility(View.VISIBLE)); // остаётся картинка
+                        runOnUiThread(() -> { poster.setAlpha(1f); poster.setVisibility(View.VISIBLE); });
                     }
                 });
+        try { video.start(); } catch (Exception ignored) { }
     }
 
     @Override
@@ -392,6 +535,7 @@ public class MainActivity extends Activity {
         super.onResume();
         if (volBar != null) { volBar.refresh(); registerReceiver(volRx, new IntentFilter("android.media.VOLUME_CHANGED_ACTION")); }
         try { video.start(); } catch (Exception ignored) { }
+        paintVpn();
         handler.removeCallbacks(tick);
         handler.post(tick);
         loadAppsAsync();

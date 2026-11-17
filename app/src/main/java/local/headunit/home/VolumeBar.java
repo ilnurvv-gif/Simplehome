@@ -33,25 +33,25 @@ public class VolumeBar extends View {
         float w = getWidth(), h = getHeight(), rad = w / 2f;
         r.set(0, 0, w, h);
         p.setStyle(Paint.Style.FILL);
-        p.setColor(0x33FFFFFF);
+        p.setColor(0x14FFFFFF);
         cv.drawRoundRect(r, rad, rad, p);
         float fh = h * cur / (float) max;
         if (fh > 0) {
             cv.save();
             cv.clipRect(0, h - fh, w, h);
-            p.setColor(0xCCFFFFFF);
+            p.setColor(0x55FFFFFF);
             cv.drawRoundRect(r, rad, rad, p);
             cv.restore();
         }
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(2f);
-        p.setColor(0x99CFE2FF);
+        p.setColor(0x40CFE2FF);
         r.inset(1, 1);
         cv.drawRoundRect(r, rad, rad, p);
         p.setStyle(Paint.Style.FILL);
         p.setTextAlign(Paint.Align.CENTER);
         p.setTextSize(w * 0.34f);
-        p.setColor(fh > h * 0.12f ? 0xFF0B1A33 : 0xFFFFFFFF);
+        p.setColor(0x99FFFFFF);
         cv.drawText(String.valueOf(cur), w / 2f, h - w * 0.28f, p);
     }
 
