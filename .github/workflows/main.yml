@@ -21,3 +21,7 @@ jobs:
         with:
           name: SimpleHome-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AntiRadar-apk
+          path: antiradar/build/outputs/apk/debug/antiradar-debug.apk
