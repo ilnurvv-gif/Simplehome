@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
     private TextView dateView;
     private SharedPreferences prefs;
     private FillVideoView video;
-    private View poster;
+    private ImageView poster;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
