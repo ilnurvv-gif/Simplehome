@@ -290,7 +290,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ---------- виджеты (Яндекс Музыка, 2ГИС) ----------
+    // ---------- виджет (Яндекс Музыка) ----------
     private static final class Slot {
         final String prefKey, title;
         final int reqBind, reqCfg;
@@ -319,12 +319,10 @@ public class MainActivity extends Activity {
         awm = AppWidgetManager.getInstance(this);
         widgetHost = new AppWidgetHost(this, 1024);
         slots = new Slot[]{
-                new Slot("widget_id", "Яндекс Музыки", 501, 502, "yandex.music", "music.yandex", "yandex.mus"),
-                new Slot("widget2_id", "2ГИС", 503, 504, "dublgis", "2gis")
+                new Slot("widget_id", "Яндекс Музыки", 501, 502, "yandex.music", "music.yandex", "yandex.mus")
         };
         int[][] ids = {
-                {R.id.widget_host, R.id.widget_add, R.id.widget_remove},
-                {R.id.widget2_host, R.id.widget2_add, R.id.widget2_remove}
+                {R.id.widget_host, R.id.widget_add, R.id.widget_remove}
         };
         for (int i = 0; i < slots.length; i++) {
             final Slot s = slots[i];
@@ -482,7 +480,7 @@ public class MainActivity extends Activity {
                 float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) < 140 || Math.abs(dx) < 2f * Math.abs(dy) || Math.abs(vx) < 300) return false;
                 if (drawer.getVisibility() == View.VISIBLE) return false;
-                int[] busy = {R.id.widget_slot, R.id.widget2_slot, R.id.vol, R.id.dock};
+                int[] busy = {R.id.widget_slot, R.id.vol, R.id.dock};
                 for (int id : busy) if (hit(findViewById(id), e1)) return false;
                 changeBackground(dx < 0 ? 1 : -1);
                 return true;
