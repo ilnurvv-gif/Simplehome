@@ -118,7 +118,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_bt).setOnClickListener(v -> safeStart(Settings.ACTION_BLUETOOTH_SETTINGS));
         findViewById(R.id.btn_settings).setOnClickListener(v -> safeStart(Settings.ACTION_SETTINGS));
         findViewById(R.id.btn_apps).setOnClickListener(v ->
-                { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); grid.requestFocus(); });
+                { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); });
         setupWidget();
     }
 
@@ -196,7 +196,7 @@ public class MainActivity extends Activity {
         final View root = findViewById(R.id.root);
         final View hit = findViewById(R.id.logo_hit);
         hit.setOnClickListener(v ->
-                { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); grid.requestFocus(); });
+                { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); });
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLogoHit());
     }
 
