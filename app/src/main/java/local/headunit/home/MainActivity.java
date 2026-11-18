@@ -92,6 +92,12 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         prefs = getSharedPreferences("home", MODE_PRIVATE);
+        IntentFilter pf = new IntentFilter();
+        pf.addAction(Intent.ACTION_PACKAGE_ADDED);
+        pf.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        pf.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        pf.addDataScheme("package");
+        registerReceiver(pkgRx, pf);
 
         grid = findViewById(R.id.grid);
         drawer = findViewById(R.id.drawer);
@@ -598,6 +604,21 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         super.onRequestPermissionsResult(code, perms, res);
         if (code == 21) startSpeed();
+    }
+
+    /** Установили/удалили/обновили приложение — обновляем список сразу, без перезапуска лаунчера. */
+    private final android.content.BroadcastReceiver pkgRx = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            handler.removeCallbacks(reloadApps);
+            handler.postDelayed(reloadApps, 1000);
+        }
+    };
+    private final Runnable reloadApps = this::loadAppsAsync;
+
+    @Override
+    protected void onDestroy() {
+        try { unregisterReceiver(pkgRx); } catch (Throwable ignore) { }
+        super.onDestroy();
     }
 
     @Override
