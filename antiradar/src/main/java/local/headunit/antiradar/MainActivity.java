@@ -127,7 +127,12 @@ public class MainActivity extends Activity implements TrackerService.Listener {
             paintSound();
         });
         TextView ov = button("Поверх окон", v -> askOverlay());
-        for (TextView t : new TextView[]{btnStart, btnUpdate, add, btnSound, ov}) {
+        TextView test = button("Проверка голоса", v -> {
+            Voice.init(this);
+            Voice.speak("Впереди камера на 60 через 200 метров");
+            android.widget.Toast.makeText(this, Voice.status(), android.widget.Toast.LENGTH_LONG).show();
+        });
+        for (TextView t : new TextView[]{btnStart, btnUpdate, add, btnSound, ov, test}) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
             lp.setMargins((int) dp(5), 0, (int) dp(5), 0);
             row.addView(t, lp);

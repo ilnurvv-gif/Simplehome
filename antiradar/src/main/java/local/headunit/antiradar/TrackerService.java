@@ -21,7 +21,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
-import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.TextView;
@@ -50,14 +49,12 @@ public class TrackerService extends Service implements LocationListener {
     public static volatile Listener listener;
     public static volatile Location LAST;
 
-    private static final int[] LEVELS = {1000, 500, 300}; // м, на которых озвучиваем
+    private static final int[] LEVELS = {1000, 500, 300, 200}; // м, на которых озвучиваем
     private static final int SEE_DIST = 1200;
 
     private LocationManager lm;
     private List<Camera> cams = new ArrayList<>();
     private final Map<Integer, Integer> announced = new HashMap<>(); // индекс камеры -> последний озвученный уровень
-    private TextToSpeech tts;
-    private boolean ttsReady;
     private ToneGenerator tone;
     private WindowManager wm;
     private TextView overlay;
@@ -73,14 +70,7 @@ public class TrackerService extends Service implements LocationListener {
         lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         try { tone = new ToneGenerator(AudioManager.STREAM_MUSIC, 90); } catch (Throwable ignore) { }
-        try {
-            tts = new TextToSpeech(this, status -> {
-                if (status == TextToSpeech.SUCCESS) {
-                    int r = tts.setLanguage(new Locale("ru", "RU"));
-                    ttsReady = r != TextToSpeech.LANG_MISSING_DATA && r != TextToSpeech.LANG_NOT_SUPPORTED;
-                }
-            });
-        } catch (Throwable ignore) { }
+        Voice.init(this);
     }
 
     @Override
@@ -206,9 +196,7 @@ public class TrackerService extends Service implements LocationListener {
         SharedPreferences p = getSharedPreferences("ar", MODE_PRIVATE);
         if (!p.getBoolean("sound", true)) return;
         try { if (tone != null) tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 250); } catch (Throwable ignore) { }
-        if (ttsReady) {
-            try { tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "cam"); } catch (Throwable ignore) { }
-        }
+        Voice.speak(text);
     }
 
     private static float angDiff(float a, float b) {
@@ -262,7 +250,7 @@ public class TrackerService extends Service implements LocationListener {
         try { lm.removeUpdates(this); } catch (Throwable ignore) { }
         try { if (overlay != null) wm.removeView(overlay); } catch (Throwable ignore) { }
         overlay = null;
-        try { if (tts != null) { tts.stop(); tts.shutdown(); } } catch (Throwable ignore) { }
+        Voice.shutdown();
         try { if (tone != null) tone.release(); } catch (Throwable ignore) { }
         STATE.running = false;
         STATE.hasFix = false;
