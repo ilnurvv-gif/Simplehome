@@ -78,18 +78,10 @@
                 android:shadowColor="#99000000"
                 android:shadowRadius="10"
                 android:text="--"
-                android:textColor="#FF2D2D"
+                android:textColor="#FFFFFF"
                 android:textSize="64sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:shadowColor="#99000000"
-                android:shadowRadius="6"
-                android:text="км/ч"
-                android:textColor="#FF2D2D"
-                android:textSize="18sp" />
         </LinearLayout>
     </LinearLayout>
 
