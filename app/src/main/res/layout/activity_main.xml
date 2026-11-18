@@ -180,7 +180,7 @@
         android:id="@+id/drawer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#8C050913"
+        android:background="#E6050913"
         android:clickable="true"
         android:visibility="gone">
 
