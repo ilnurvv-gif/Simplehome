@@ -64,10 +64,9 @@
             android:textStyle="bold" />
         <LinearLayout
             android:id="@+id/speed_circle"
-            android:layout_width="150dp"
-            android:layout_height="150dp"
-            android:layout_marginTop="12dp"
-            android:background="@drawable/speed_bg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:gravity="center"
             android:orientation="vertical">
 
@@ -76,17 +75,21 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:includeFontPadding="false"
+                android:shadowColor="#99000000"
+                android:shadowRadius="10"
                 android:text="--"
-                android:textColor="#FFFFFF"
-                android:textSize="56sp"
+                android:textColor="#FF2D2D"
+                android:textSize="64sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:shadowColor="#99000000"
+                android:shadowRadius="6"
                 android:text="км/ч"
-                android:textColor="#CCFFFFFF"
-                android:textSize="16sp" />
+                android:textColor="#FF2D2D"
+                android:textSize="18sp" />
         </LinearLayout>
     </LinearLayout>
 
