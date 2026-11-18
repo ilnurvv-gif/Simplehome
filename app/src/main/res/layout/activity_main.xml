@@ -289,19 +289,20 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <GridView
-                android:id="@+id/grid"
+            <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
                 android:layout_marginTop="14dp"
-                android:clipToPadding="false"
-                android:horizontalSpacing="10dp"
-                android:listSelector="@android:color/transparent"
-                android:numColumns="6"
-                android:scrollbars="none"
-                android:stretchMode="columnWidth"
-                android:verticalSpacing="10dp" />
+                android:layout_weight="1"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <GridLayout
+                    android:id="@+id/grid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:columnCount="6" />
+            </ScrollView>
 
         </LinearLayout>
     </FrameLayout>

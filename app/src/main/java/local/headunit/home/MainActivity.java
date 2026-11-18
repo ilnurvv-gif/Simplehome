@@ -79,8 +79,7 @@ public class MainActivity extends Activity {
         }
     };
 
-    private GridView grid;
-    private AppAdapter adapter;
+    private android.widget.GridLayout grid;
     private View drawer;
     private LinearLayout dock;
     private TextView greeting;
@@ -104,14 +103,7 @@ public class MainActivity extends Activity {
         greeting = findViewById(R.id.greeting);
         dateView = findViewById(R.id.date);
 
-        adapter = new AppAdapter();
-        grid.setAdapter(adapter);
         drawer.setOnClickListener(v -> drawer.setVisibility(View.GONE));   // тап вне окна закрывает
-        grid.setOnItemClickListener((parent, view, position, id) -> launch(apps.get(position)));
-        grid.setOnItemLongClickListener((parent, view, position, id) -> {
-            showAppMenu(apps.get(position));
-            return true;
-        });
 
         findViewById(R.id.pill_wifi).setOnClickListener(v -> safeStart(Settings.ACTION_WIFI_SETTINGS));
         setupVpn();
@@ -796,29 +788,32 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 apps.clear();
                 apps.addAll(result);
-                adapter.notifyDataSetChanged();
+                rebuildGrid();
                 rebuildDock();
             });
         }).start();
     }
 
-    private class AppAdapter extends BaseAdapter {
-        @Override public int getCount() { return apps.size(); }
-        @Override public Object getItem(int position) { return apps.get(position); }
-        @Override public long getItemId(int position) { return position; }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-            View v = convertView;
-            if (v == null) {
-                v = LayoutInflater.from(MainActivity.this)
-                        .inflate(R.layout.item_app, parent, false);
-            }
-            AppItem item = apps.get(position);
-            ((TextView) findViewById(R.id.apps_count)).setText(apps.size() + " прилож.");
+    /** Список приложений — обычные вьюхи в ScrollView (без переиспользования ячеек GridView). */
+    private void rebuildGrid() {
+        grid.removeAllViews();
+        ((TextView) findViewById(R.id.apps_count)).setText(apps.size() + " прилож.");
+        LayoutInflater inf = LayoutInflater.from(this);
+        for (int i = 0; i < apps.size(); i++) {
+            final AppItem item = apps.get(i);
+            View v = inf.inflate(R.layout.item_app, grid, false);
             ((ImageView) v.findViewById(R.id.icon)).setImageDrawable(item.icon);
             ((TextView) v.findViewById(R.id.label)).setText(item.label);
-            return v;
+            v.setClickable(true);
+            v.setOnClickListener(x -> launch(item));
+            v.setOnLongClickListener(x -> { showAppMenu(item); return true; });
+            android.widget.GridLayout.LayoutParams lp = new android.widget.GridLayout.LayoutParams(
+                    android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED),
+                    android.widget.GridLayout.spec(android.widget.GridLayout.UNDEFINED, 1f));
+            lp.width = 0;
+            int m = (int) (5 * getResources().getDisplayMetrics().density);
+            lp.setMargins(m, m, m, m);
+            grid.addView(v, lp);
         }
     }
 }
