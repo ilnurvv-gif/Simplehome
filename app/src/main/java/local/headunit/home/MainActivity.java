@@ -106,6 +106,7 @@ public class MainActivity extends Activity {
 
         adapter = new AppAdapter();
         grid.setAdapter(adapter);
+        drawer.setOnClickListener(v -> drawer.setVisibility(View.GONE));   // тап вне окна закрывает
         grid.setOnItemClickListener((parent, view, position, id) -> launch(apps.get(position)));
         grid.setOnItemLongClickListener((parent, view, position, id) -> {
             showAppMenu(apps.get(position));
@@ -117,7 +118,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_bt).setOnClickListener(v -> safeStart(Settings.ACTION_BLUETOOTH_SETTINGS));
         findViewById(R.id.btn_settings).setOnClickListener(v -> safeStart(Settings.ACTION_SETTINGS));
         findViewById(R.id.btn_apps).setOnClickListener(v ->
-                drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+                { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); grid.requestFocus(); });
         setupWidget();
     }
 
@@ -195,7 +196,7 @@ public class MainActivity extends Activity {
         final View root = findViewById(R.id.root);
         final View hit = findViewById(R.id.logo_hit);
         hit.setOnClickListener(v ->
-                drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+                { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); grid.requestFocus(); });
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLogoHit());
     }
 
@@ -760,6 +761,7 @@ public class MainActivity extends Activity {
                         .inflate(R.layout.item_app, parent, false);
             }
             AppItem item = apps.get(position);
+            ((TextView) findViewById(R.id.apps_count)).setText(apps.size() + " прилож.");
             ((ImageView) v.findViewById(R.id.icon)).setImageDrawable(item.icon);
             ((TextView) v.findViewById(R.id.label)).setText(item.label);
             return v;
