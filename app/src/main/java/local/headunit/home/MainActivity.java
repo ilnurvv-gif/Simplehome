@@ -585,6 +585,15 @@ public class MainActivity extends Activity {
 
     private void startSpeed() {
         speedTv = findViewById(R.id.speed);
+        speedTv.setOnLongClickListener(v -> {      // долгое нажатие на скорость: отчёт «что отдаёт CAN»
+            TextView t = new TextView(this);
+            t.setText(CarProbe.report(this)); t.setTextIsSelectable(true);
+            t.setTextSize(13); t.setPadding(40, 20, 40, 20);
+            android.widget.ScrollView sv = new android.widget.ScrollView(this); sv.addView(t);
+            new android.app.AlertDialog.Builder(this).setTitle("CAN / авто: разведка").setView(sv)
+                    .setPositiveButton("Закрыть", null).show();
+            return true;
+        });
         if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             if (!askedLoc) { askedLoc = true; requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 21); }
             return;
