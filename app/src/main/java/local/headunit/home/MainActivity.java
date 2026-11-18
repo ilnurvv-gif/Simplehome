@@ -10,6 +10,11 @@ import android.content.ComponentName;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
+import android.location.LocationManager;
+import android.location.LocationListener;
+import android.location.Location;
+import android.Manifest;
 import android.graphics.Rect;
 import android.widget.EditText;
 import android.view.MotionEvent;
@@ -81,7 +86,6 @@ public class MainActivity extends Activity {
     private TextView greeting;
     private TextView dateView;
     private SharedPreferences prefs;
-    private FillVideoView video;
     private ImageView poster;
 
     @Override
@@ -93,7 +97,6 @@ public class MainActivity extends Activity {
         grid = findViewById(R.id.grid);
         drawer = findViewById(R.id.drawer);
         dock = findViewById(R.id.dock);
-        video = findViewById(R.id.video);
         poster = findViewById(R.id.poster);
         setupVideo();
         setupAudioControls();
@@ -462,18 +465,16 @@ public class MainActivity extends Activity {
         super.onStop();
     }
 
-    // ---------- фоны: свайп влево/вправо меняет картинку ----------
-    private static final int[] RAW = {R.raw.bg_desert, R.raw.bg_snow, R.raw.bg_city};
+    // ---------- фоны: свайп влево/вправо меняет картинку (статичные, без анимации) ----------
     private static final int[] POSTER = {R.drawable.poster_desert, R.drawable.poster_snow, R.drawable.poster_city};
-    // кнопка «все приложения» на картинке: центр x, y и размер (в координатах видео 1600x960)
-    private static final float[][] LOGO = {{158, 847, 250, 135}, {159, 853, 250, 135}, {568, 237, 190, 110}};
+    // кнопка «все приложения» на картинке: центр x, y и размер (в координатах картинки 1600x960)
+    private static final float[][] LOGO = {{158, 772, 250, 135}, {159, 772, 250, 135}, {568, 237, 190, 110}};
     private int bgIndex;
     private GestureDetector swipe;
 
     private void setupVideo() {
-        bgIndex = Math.max(0, Math.min(RAW.length - 1, prefs.getInt("bg_index", 0)));
+        bgIndex = Math.max(0, Math.min(POSTER.length - 1, prefs.getInt("bg_index", 0)));
         poster.setImageResource(POSTER[bgIndex]);
-        startVideo();
         swipe = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
@@ -481,7 +482,7 @@ public class MainActivity extends Activity {
                 float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) < 140 || Math.abs(dx) < 2f * Math.abs(dy) || Math.abs(vx) < 300) return false;
                 if (drawer.getVisibility() == View.VISIBLE) return false;
-                int[] busy = {R.id.widget_slot, R.id.vol, R.id.dock};
+                int[] busy = {R.id.widget_slot, R.id.right_col, R.id.dock};
                 for (int id : busy) if (hit(findViewById(id), e1)) return false;
                 changeBackground(dx < 0 ? 1 : -1);
                 return true;
@@ -503,38 +504,70 @@ public class MainActivity extends Activity {
     }
 
     private void changeBackground(int dir) {
-        bgIndex = (bgIndex + dir + RAW.length) % RAW.length;
+        bgIndex = (bgIndex + dir + POSTER.length) % POSTER.length;
         prefs.edit().putInt("bg_index", bgIndex).apply();
         poster.setImageResource(POSTER[bgIndex]);
         poster.setAlpha(0f);
-        poster.setVisibility(View.VISIBLE);
-        poster.animate().alpha(1f).setDuration(220).withEndAction(this::startVideo).start();
+        poster.animate().alpha(1f).setDuration(220).start();
         placeLogoHit();
     }
 
-    private void startVideo() {
-        video.setSource(Uri.parse("android.resource://" + getPackageName() + "/" + RAW[bgIndex]),
-                new FillVideoView.Callback() {
-                    @Override
-                    public void onFirstFrame() {
-                        runOnUiThread(() -> poster.animate().alpha(0f).setDuration(250)
-                                .withEndAction(() -> poster.setVisibility(View.GONE)).start());
-                    }
+    // ---------- скорость по GPS ----------
+    private TextView speedTv;
+    private LocationManager speedLm;
+    private final SpeedCalc speedCalc = new SpeedCalc();
+    private long lastSpeedFix;
+    private boolean askedLoc;
+    private final LocationListener speedListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location l) {
+            lastSpeedFix = System.currentTimeMillis();
+            float raw = l.hasSpeed() ? l.getSpeed() * 3.6f : 0f;
+            speedTv.setText(String.valueOf(Math.round(speedCalc.update(raw, lastSpeedFix))));
+        }
+        @Override public void onStatusChanged(String p, int s, Bundle e) { }
+        @Override public void onProviderEnabled(String p) { }
+        @Override public void onProviderDisabled(String p) { speedTv.setText("--"); }
+    };
+    private final Runnable speedWatch = new Runnable() {
+        @Override
+        public void run() {
+            if (System.currentTimeMillis() - lastSpeedFix > 6000) { speedTv.setText("--"); speedCalc.reset(); }
+            handler.postDelayed(this, 2000);
+        }
+    };
 
-                    @Override
-                    public void onFailed() {
-                        runOnUiThread(() -> { poster.setAlpha(1f); poster.setVisibility(View.VISIBLE); });
-                    }
-                });
-        try { video.start(); } catch (Exception ignored) { }
+    private void startSpeed() {
+        speedTv = findViewById(R.id.speed);
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (!askedLoc) { askedLoc = true; requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 21); }
+            return;
+        }
+        try {
+            speedLm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            speedLm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, speedListener, Looper.getMainLooper());
+            handler.removeCallbacks(speedWatch);
+            handler.post(speedWatch);
+        } catch (Throwable ignore) { }
+    }
+
+    private void stopSpeed() {
+        handler.removeCallbacks(speedWatch);
+        try { if (speedLm != null) speedLm.removeUpdates(speedListener); } catch (Throwable ignore) { }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(code, perms, res);
+        if (code == 21) startSpeed();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         if (volBar != null) { volBar.refresh(); registerReceiver(volRx, new IntentFilter("android.media.VOLUME_CHANGED_ACTION")); }
-        try { video.start(); } catch (Exception ignored) { }
         paintVpn();
+        startSpeed();
         handler.removeCallbacks(tick);
         handler.post(tick);
         loadAppsAsync();
@@ -542,7 +575,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        try { video.pause(); } catch (Exception ignored) { }
+        stopSpeed();
         handler.removeCallbacks(tick);
         try { unregisterReceiver(volRx); } catch (Throwable ignore) {}
         super.onPause();

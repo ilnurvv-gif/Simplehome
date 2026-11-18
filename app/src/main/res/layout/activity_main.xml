@@ -4,11 +4,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <local.headunit.home.FillVideoView
-        android:id="@+id/video"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
     <ImageView
         android:id="@+id/poster"
         android:layout_width="match_parent"
@@ -82,28 +77,10 @@
         android:paddingEnd="12dp"
         android:paddingBottom="8dp" />
 
-    <TextView
-        android:id="@+id/btn_bass"
-        android:layout_width="wrap_content"
-        android:layout_height="64dp"
-        android:layout_gravity="start|bottom"
-        android:layout_marginStart="24dp"
-        android:layout_marginBottom="150dp"
-        android:background="@drawable/bass_off"
-        android:clickable="true"
-        android:gravity="center"
-        android:minWidth="130dp"
-        android:paddingStart="26dp"
-        android:paddingEnd="26dp"
-        android:text="BASS"
-        android:textColor="#FFFFFF"
-        android:textSize="20sp"
-        android:textStyle="bold" />
-
     <FrameLayout
         android:id="@+id/widget_slot"
-        android:layout_width="320dp"
-        android:layout_height="150dp"
+        android:layout_width="420dp"
+        android:layout_height="300dp"
         android:layout_gravity="start|top"
         android:layout_marginStart="24dp"
         android:layout_marginTop="110dp"
@@ -147,12 +124,57 @@
         android:background="@drawable/logo_hit_bg"
         android:clickable="true" />
 
-    <local.headunit.home.VolumeBar
-        android:id="@+id/vol"
-        android:layout_width="60dp"
-        android:layout_height="240dp"
+    <LinearLayout
+        android:id="@+id/right_col"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="end|center_vertical"
-        android:layout_marginEnd="24dp" />
+        android:layout_marginEnd="24dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/speed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="#99000000"
+            android:shadowRadius="8"
+            android:text="--"
+            android:textColor="#FFFFFF"
+            android:textSize="46sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="#99000000"
+            android:shadowRadius="6"
+            android:text="км/ч"
+            android:textColor="#E0FFFFFF"
+            android:textSize="14sp" />
+
+        <local.headunit.home.VolumeBar
+            android:id="@+id/vol"
+            android:layout_width="60dp"
+            android:layout_height="240dp"
+            android:layout_marginTop="10dp" />
+
+        <TextView
+            android:id="@+id/btn_bass"
+            android:layout_width="wrap_content"
+            android:layout_height="64dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bass_off"
+            android:clickable="true"
+            android:gravity="center"
+            android:minWidth="130dp"
+            android:paddingStart="26dp"
+            android:paddingEnd="26dp"
+            android:text="BASS"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <FrameLayout
         android:id="@+id/drawer"

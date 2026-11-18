@@ -63,6 +63,7 @@ public class TrackerService extends Service implements LocationListener {
     private TextView overlay;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private long lastFix;
+    private final SpeedCalc speedCalc = new SpeedCalc();
 
     @Override public IBinder onBind(Intent i) { return null; }
 
@@ -88,6 +89,7 @@ public class TrackerService extends Service implements LocationListener {
         cams = CameraDb.load(this);
         STATE.cameras = cams.size();
         announced.clear();
+        speedCalc.reset();
         try {
             lm.removeUpdates(this);
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this, Looper.getMainLooper());
@@ -123,9 +125,10 @@ public class TrackerService extends Service implements LocationListener {
         lastFix = System.currentTimeMillis();
         LAST = l;
         STATE.hasFix = true;
-        float kmh = l.hasSpeed() ? l.getSpeed() * 3.6f : 0f;
+        float raw = l.hasSpeed() ? l.getSpeed() * 3.6f : 0f;
+        float kmh = speedCalc.update(raw, lastFix);   // как на спидометре: +4 км/ч и без отставания GPS
         STATE.speedKmh = kmh;
-        boolean moving = kmh > 7f && l.hasBearing();
+        boolean moving = raw > 7f && l.hasBearing();
         float heading = l.getBearing();
 
         int best = -1; float bestD = Float.MAX_VALUE;
