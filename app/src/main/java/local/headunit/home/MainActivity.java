@@ -338,12 +338,6 @@ public class MainActivity extends Activity {
             s.frame = findViewById(ids[i][4]);
             makeDraggable(s);
             s.add.setOnClickListener(v -> pickWidget(s));
-            s.rm.setOnClickListener(v -> {
-                int id = prefs.getInt(s.prefKey, -1);
-                if (id != -1) { try { widgetHost.deleteAppWidgetId(id); } catch (Throwable ignore) {} }
-                prefs.edit().remove(s.prefKey).apply();
-                showWidget(s);
-            });
             showWidget(s);
         }
     }
@@ -351,11 +345,6 @@ public class MainActivity extends Activity {
     /** Кнопка ✥ в углу окна виджета: тянем — окно двигается, позиция запоминается. */
     private void makeDraggable(final Slot s) {
         final String kx = s.prefKey + "_tx", ky = s.prefKey + "_ty";
-        s.frame.post(() -> {
-            s.frame.setTranslationX(prefs.getFloat(kx, 0f));
-            s.frame.setTranslationY(prefs.getFloat(ky, 0f));
-            clampSlot(s);
-        });
         final float[] st = new float[4];
         s.move.setOnTouchListener((v, e) -> {
             switch (e.getActionMasked()) {
@@ -379,10 +368,45 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void restorePos(Slot s) {
+        s.frame.setTranslationX(prefs.getFloat(s.prefKey + "_tx", 0f));
+        s.frame.setTranslationY(prefs.getFloat(s.prefKey + "_ty", 0f));
+        clampSlot(s);
+    }
+
+    private void removeWidget(Slot s) {
+        int id = prefs.getInt(s.prefKey, -1);
+        if (id != -1) { try { widgetHost.deleteAppWidgetId(id); } catch (Throwable ignore) {} }
+        prefs.edit().remove(s.prefKey).apply();
+        showWidget(s);
+    }
+
+    private void confirmRemove(final Slot s) {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Убрать виджет " + s.title + "?")
+                .setPositiveButton("Убрать", (d, w) -> removeWidget(s))
+                .setNegativeButton("Отмена", null).show();
+    }
+
+    private void addMenu() {
+        final List<Slot> free = new ArrayList<>();
+        for (Slot s : slots) if (prefs.getInt(s.prefKey, -1) == -1) free.add(s);
+        if (free.isEmpty()) {
+            Toast.makeText(this, "Оба виджета уже на экране. Чтобы убрать — удерживайте виджет", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] names = new String[free.size()];
+        for (int i = 0; i < names.length; i++) names[i] = "Виджет " + free.get(i).title;
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Добавить на экран")
+                .setItems(names, (d, which) -> pickWidget(free.get(which)))
+                .setNegativeButton("Отмена", null).show();
+    }
+
     private void clampSlot(Slot s) {
         View root = findViewById(R.id.root);
         View f = s.frame;
-        if (root == null || root.getWidth() == 0) return;
+        if (root == null || root.getWidth() == 0 || f.getVisibility() != View.VISIBLE || f.getWidth() == 0) return;
         float tx = Math.max(-f.getLeft(), Math.min(root.getWidth() - f.getRight(), f.getTranslationX()));
         float ty = Math.max(-f.getTop(), Math.min(root.getHeight() - f.getBottom(), f.getTranslationY()));
         f.setTranslationX(tx); f.setTranslationY(ty);
@@ -393,8 +417,7 @@ public class MainActivity extends Activity {
         int id = prefs.getInt(s.prefKey, -1);
         AppWidgetProviderInfo info = id == -1 ? null : awm.getAppWidgetInfo(id);
         if (info == null) {
-            s.add.setVisibility(View.VISIBLE);
-            s.rm.setVisibility(View.GONE);
+            s.frame.setVisibility(View.GONE);
             return;
         }
         try {
@@ -407,11 +430,12 @@ public class MainActivity extends Activity {
                 try { hv.updateAppWidgetSize(null, w, hgt, w, hgt); } catch (Throwable ignore) {}
             });
             s.add.setVisibility(View.GONE);
-            s.rm.setVisibility(View.VISIBLE);
+            s.rm.setVisibility(View.GONE);
+            s.frame.setVisibility(View.VISIBLE);
+            s.frame.post(() -> restorePos(s));
         } catch (Throwable t) {
             prefs.edit().remove(s.prefKey).apply();
-            s.add.setVisibility(View.VISIBLE);
-            s.rm.setVisibility(View.GONE);
+            s.frame.setVisibility(View.GONE);
         }
     }
 
@@ -520,6 +544,18 @@ public class MainActivity extends Activity {
         bgIndex = Math.max(0, Math.min(POSTER.length - 1, prefs.getInt("bg_index", 0)));
         poster.setImageResource(POSTER[bgIndex]);
         swipe = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public void onLongPress(MotionEvent e) {
+                if (drawer.getVisibility() == View.VISIBLE || slots == null) return;
+                for (Slot sl : slots) {
+                    if (sl.frame.getVisibility() == View.VISIBLE && hit(sl.frame, e)) { confirmRemove(sl); return; }
+                }
+                int[] busy = {R.id.right_col, R.id.dock, R.id.logo_hit, R.id.pill_wifi, R.id.pill_vpn,
+                        R.id.btn_bt, R.id.btn_apps, R.id.btn_settings};
+                for (int id : busy) if (hit(findViewById(id), e)) return;
+                addMenu();
+            }
+
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float vx, float vy) {
                 if (e1 == null || e2 == null) return false;
