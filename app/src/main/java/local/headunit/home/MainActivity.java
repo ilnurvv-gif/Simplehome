@@ -324,10 +324,12 @@ public class MainActivity extends Activity {
         awm = AppWidgetManager.getInstance(this);
         widgetHost = new AppWidgetHost(this, 1024);
         slots = new Slot[]{
-                new Slot("widget_id", "Яндекс Музыки", 501, 502, "yandex.music", "music.yandex", "yandex.mus")
+                new Slot("widget_id", "Яндекс Музыки", 501, 502, "yandex.music", "music.yandex", "yandex.mus"),
+                new Slot("widget_id_maps", "Яндекс Карт", 503, 504, "yandex.yandexmaps", "yandexmaps", "yandex.maps")
         };
         int[][] ids = {
-                {R.id.widget_host, R.id.widget_add, R.id.widget_remove}
+                {R.id.widget_host, R.id.widget_add, R.id.widget_remove},
+                {R.id.widget_host2, R.id.widget_add2, R.id.widget_remove2}
         };
         for (int i = 0; i < slots.length; i++) {
             final Slot s = slots[i];
@@ -467,9 +469,9 @@ public class MainActivity extends Activity {
     }
 
     // ---------- фоны: свайп влево/вправо меняет картинку (статичные, без анимации) ----------
-    private static final int[] POSTER = {R.drawable.poster_desert, R.drawable.poster_snow, R.drawable.poster_city};
+    private static final int[] POSTER = {R.drawable.poster_desert, R.drawable.poster_snow};
     // кнопка «все приложения» на картинке: центр x, y и размер (в координатах картинки 1600x960)
-    private static final float[][] LOGO = {{158, 772, 250, 135}, {159, 772, 250, 135}, {568, 237, 190, 110}};
+    private static final float[][] LOGO = {{158, 772, 250, 135}, {159, 772, 250, 135}};
     private int bgIndex;
     private GestureDetector swipe;
 
@@ -483,7 +485,7 @@ public class MainActivity extends Activity {
                 float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) < 140 || Math.abs(dx) < 2f * Math.abs(dy) || Math.abs(vx) < 300) return false;
                 if (drawer.getVisibility() == View.VISIBLE) return false;
-                int[] busy = {R.id.widget_slot, R.id.right_col, R.id.dock};
+                int[] busy = {R.id.widget_slot, R.id.widget_slot2, R.id.right_col, R.id.dock};
                 for (int id : busy) if (hit(findViewById(id), e1)) return false;
                 changeBackground(dx < 0 ? 1 : -1);
                 return true;
