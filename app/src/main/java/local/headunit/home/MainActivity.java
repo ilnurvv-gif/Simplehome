@@ -323,7 +323,7 @@ public class MainActivity extends Activity {
         widgetHost = new AppWidgetHost(this, 1024);
         slots = new Slot[]{
                 new Slot("widget_id", "Яндекс Музыки", 501, 502, "yandex.music", "music.yandex", "yandex.mus"),
-                new Slot("widget_id_maps", "Яндекс Карт", 503, 504, "yandex.yandexmaps", "yandexmaps", "yandex.maps")
+                new Slot("widget_id_maps", "Яндекс Навигатора", 503, 504, "yandex.yandexnavi", "yandexnavi", "yandex.navi", "yandex.yandexmaps")
         };
         int[][] ids = {
                 {R.id.widget_host, R.id.widget_add, R.id.widget_remove, R.id.widget_move, R.id.widget_slot},
