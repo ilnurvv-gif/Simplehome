@@ -10,6 +10,7 @@ import android.content.ComponentName;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.Build;
 import android.location.LocationManager;
 import android.location.LocationListener;
@@ -120,72 +121,12 @@ public class MainActivity extends Activity {
         setupWidget();
     }
 
-    private VolumeBar volBar;
-    private TextView bassBtn;
-    private int bassMode;
-    private short[] eqCustom;
-    private final BroadcastReceiver volRx = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { if (volBar != null) volBar.refresh(); }
-    };
-
+    /** Регулятора громкости и BASS больше нет: громкость медиа держим на максимуме. */
     private void setupAudioControls() {
-        volBar = findViewById(R.id.vol);
-        bassBtn = findViewById(R.id.btn_bass);
-        bassMode = prefs.getInt("bass_mode", 0);
-        if (bassMode == 2) bassMode = 1; // старый «BASS+» больше нет
-        eqCustom = loadEq();
-        if (bassMode != 0) {
-            String r = BassController.apply(bassMode, eqCustom);
-            if (r.isEmpty()) bassMode = 0;
-        }
-        paintBass();
-        bassBtn.setOnClickListener(v -> {
-            int next = bassMode == 0 ? 1 : 0; // выкл <-> BASS
-            String r = BassController.apply(next, eqCustom);
-            if (next != 0 && r.isEmpty()) {
-                Toast.makeText(this, "Эта магнитола не пускает аудиоэффекты в лаунчер", Toast.LENGTH_LONG).show();
-                BassController.apply(0, null);
-                next = 0;
-            } else if (next != 0) {
-                Toast.makeText(this, "Эффекты: " + r, Toast.LENGTH_SHORT).show();
-            }
-            bassMode = next;
-            prefs.edit().putInt("bass_mode", bassMode).apply();
-            paintBass();
-        });
-        bassBtn.setOnLongClickListener(v -> {
-            EqDialog.show(this, eqCustom, levels -> {
-                eqCustom = levels;
-                saveEq(levels);
-                bassMode = 3;
-                BassController.apply(3, eqCustom);
-                prefs.edit().putInt("bass_mode", 3).apply();
-                paintBass();
-            });
-            return true;
-        });
-    }
-
-    private short[] loadEq() {
-        String s = prefs.getString("eq_custom", "");
-        if (s.isEmpty()) return null;
-        String[] p = s.split(",");
-        short[] r = new short[p.length];
-        try { for (int i = 0; i < p.length; i++) r[i] = Short.parseShort(p[i]); } catch (Exception e) { return null; }
-        return r;
-    }
-
-    private void saveEq(short[] lv) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < lv.length; i++) { if (i > 0) sb.append(','); sb.append(lv[i]); }
-        prefs.edit().putString("eq_custom", sb.toString()).apply();
-    }
-
-    private void paintBass() {
-        boolean on = bassMode != 0;
-        bassBtn.setBackgroundResource(on ? R.drawable.bass_on : R.drawable.bass_off);
-        bassBtn.setText(bassMode == 3 ? "EQ" : "BASS");
-        bassBtn.setAlpha(on ? 1f : 0.85f);
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
+        } catch (Throwable ignore) { }
     }
 
     // ---------- логотип Hyundai на фоне = кнопка «все приложения» ----------
@@ -550,7 +491,7 @@ public class MainActivity extends Activity {
                 for (Slot sl : slots) {
                     if (sl.frame.getVisibility() == View.VISIBLE && hit(sl.frame, e)) { confirmRemove(sl); return; }
                 }
-                int[] busy = {R.id.right_col, R.id.dock, R.id.logo_hit, R.id.pill_wifi, R.id.pill_vpn,
+                int[] busy = {R.id.dock, R.id.logo_hit, R.id.pill_wifi, R.id.pill_vpn,
                         R.id.btn_bt, R.id.btn_apps, R.id.btn_settings};
                 for (int id : busy) if (hit(findViewById(id), e)) return;
                 addMenu();
@@ -562,7 +503,7 @@ public class MainActivity extends Activity {
                 float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) < 140 || Math.abs(dx) < 2f * Math.abs(dy) || Math.abs(vx) < 300) return false;
                 if (drawer.getVisibility() == View.VISIBLE) return false;
-                int[] busy = {R.id.widget_slot, R.id.widget_slot2, R.id.right_col, R.id.dock};
+                int[] busy = {R.id.widget_slot, R.id.widget_slot2, R.id.dock};
                 for (int id : busy) if (hit(findViewById(id), e1)) return false;
                 changeBackground(dx < 0 ? 1 : -1);
                 return true;
@@ -660,7 +601,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (volBar != null) { volBar.refresh(); registerReceiver(volRx, new IntentFilter("android.media.VOLUME_CHANGED_ACTION")); }
         paintVpn();
         startSpeed();
         handler.removeCallbacks(tick);
@@ -672,7 +612,6 @@ public class MainActivity extends Activity {
     protected void onPause() {
         stopSpeed();
         handler.removeCallbacks(tick);
-        try { unregisterReceiver(volRx); } catch (Throwable ignore) {}
         super.onPause();
     }
 
