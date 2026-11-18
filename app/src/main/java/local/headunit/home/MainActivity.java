@@ -301,7 +301,7 @@ public class MainActivity extends Activity {
         final int reqBind, reqCfg;
         final String[] hints;
         FrameLayout box;
-        View add, rm;
+        View add, rm, move, frame;
         int pendingId = -1;
 
         Slot(String prefKey, String title, int reqBind, int reqCfg, String... hints) {
@@ -328,14 +328,17 @@ public class MainActivity extends Activity {
                 new Slot("widget_id_maps", "Яндекс Карт", 503, 504, "yandex.yandexmaps", "yandexmaps", "yandex.maps")
         };
         int[][] ids = {
-                {R.id.widget_host, R.id.widget_add, R.id.widget_remove},
-                {R.id.widget_host2, R.id.widget_add2, R.id.widget_remove2}
+                {R.id.widget_host, R.id.widget_add, R.id.widget_remove, R.id.widget_move, R.id.widget_slot},
+                {R.id.widget_host2, R.id.widget_add2, R.id.widget_remove2, R.id.widget_move2, R.id.widget_slot2}
         };
         for (int i = 0; i < slots.length; i++) {
             final Slot s = slots[i];
             s.box = findViewById(ids[i][0]);
             s.add = findViewById(ids[i][1]);
             s.rm = findViewById(ids[i][2]);
+            s.move = findViewById(ids[i][3]);
+            s.frame = findViewById(ids[i][4]);
+            makeDraggable(s);
             s.add.setOnClickListener(v -> pickWidget(s));
             s.rm.setOnClickListener(v -> {
                 int id = prefs.getInt(s.prefKey, -1);
@@ -345,6 +348,46 @@ public class MainActivity extends Activity {
             });
             showWidget(s);
         }
+    }
+
+    /** Кнопка ✥ в углу окна виджета: тянем — окно двигается, позиция запоминается. */
+    private void makeDraggable(final Slot s) {
+        final String kx = s.prefKey + "_tx", ky = s.prefKey + "_ty";
+        s.frame.post(() -> {
+            s.frame.setTranslationX(prefs.getFloat(kx, 0f));
+            s.frame.setTranslationY(prefs.getFloat(ky, 0f));
+            clampSlot(s);
+        });
+        final float[] st = new float[4];
+        s.move.setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    st[0] = e.getRawX(); st[1] = e.getRawY();
+                    st[2] = s.frame.getTranslationX(); st[3] = s.frame.getTranslationY();
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    s.frame.setTranslationX(st[2] + e.getRawX() - st[0]);
+                    s.frame.setTranslationY(st[3] + e.getRawY() - st[1]);
+                    clampSlot(s);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    prefs.edit().putFloat(kx, s.frame.getTranslationX())
+                            .putFloat(ky, s.frame.getTranslationY()).apply();
+                    return true;
+            }
+            return false;
+        });
+    }
+
+    private void clampSlot(Slot s) {
+        View root = findViewById(R.id.root);
+        View f = s.frame;
+        if (root == null || root.getWidth() == 0) return;
+        float tx = Math.max(-f.getLeft(), Math.min(root.getWidth() - f.getRight(), f.getTranslationX()));
+        float ty = Math.max(-f.getTop(), Math.min(root.getHeight() - f.getBottom(), f.getTranslationY()));
+        f.setTranslationX(tx); f.setTranslationY(ty);
     }
 
     private void showWidget(final Slot s) {
