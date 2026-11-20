@@ -1,6 +1,7 @@
 package local.headunit.home;
 
 import android.app.Activity;
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.appwidget.AppWidgetHost;
 import android.appwidget.AppWidgetHostView;
@@ -119,6 +120,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_apps).setOnClickListener(v ->
                 { drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE); });
         setupWidget();
+        setupElm();
     }
 
     /** Регулятора громкости и BASS больше нет: громкость медиа держим на максимуме. */
@@ -127,6 +129,124 @@ public class MainActivity extends Activity {
             AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             am.setStreamVolume(AudioManager.STREAM_MUSIC, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC), 0);
         } catch (Throwable ignore) { }
+    }
+
+    // ---------- ELM327: скорость, расход, ошибки (внизу справа) ----------
+    private ElmClient elm;
+    private TextView elmCons, elmUnit, elmSub, elmEng, elmDtc;
+    private final Runnable elmTick = new Runnable() {
+        @Override public void run() { paintElm(); handler.postDelayed(this, 500); }
+    };
+
+    private void setupElm() {
+        speedTv = findViewById(R.id.speed);
+        elm = new ElmClient();
+        elm.engineL = prefs.getFloat("eng_l", 2.0f);
+        elmCons = findViewById(R.id.elm_cons);
+        elmUnit = findViewById(R.id.elm_unit);
+        elmSub = findViewById(R.id.elm_sub);
+        elmEng = findViewById(R.id.elm_eng);
+        elmDtc = findViewById(R.id.elm_dtc);
+        View panel = findViewById(R.id.elm_panel);
+        panel.setOnClickListener(v -> elmMenu());
+        panel.setOnLongClickListener(v -> { elmMenu(); return true; });
+        startElm();
+        handler.removeCallbacks(elmTick);
+        handler.post(elmTick);
+    }
+
+    private void startElm() {
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, 22);
+            return;
+        }
+        elm.start(prefs.getString("elm_addr", ""));
+    }
+
+    private void paintElm() {
+        if (elm == null) return;
+        boolean ok = elm.connected;
+        if (ok && elm.speed >= 0 && System.currentTimeMillis() - elm.speedT < 3000) {
+            speedTv.setText(String.valueOf(Math.round(elm.speed)));
+        }
+        if (!ok) {
+            elmCons.setText("--"); elmUnit.setText("л/100");
+            elmSub.setText(elm.status.isEmpty() ? "ELM327: нет связи" : elm.status);
+            elmEng.setText("Нажмите — выбрать адаптер");
+            elmDtc.setText("");
+            return;
+        }
+        if (elm.lp100 >= 0) { elmCons.setText(String.format(Locale.US, "%.1f", elm.lp100)); elmUnit.setText("л/100"); }
+        else if (elm.lph >= 0) { elmCons.setText(String.format(Locale.US, "%.1f", elm.lph)); elmUnit.setText("л/ч"); }
+        else { elmCons.setText("--"); elmUnit.setText("расход"); }
+        StringBuilder sub = new StringBuilder();
+        if (elm.avg >= 0) sub.append(String.format(Locale.US, "ср. %.1f л/100", elm.avg));
+        if (elm.tripKm > 0) { if (sub.length() > 0) sub.append(" · "); sub.append(String.format(Locale.US, "%.1f км", elm.tripKm)); }
+        elmSub.setText(sub);
+        StringBuilder eng = new StringBuilder();
+        if (elm.coolant > -100) eng.append(Math.round(elm.coolant)).append("°C");
+        if (elm.rpm >= 0) { if (eng.length() > 0) eng.append(" · "); eng.append(Math.round(elm.rpm / 10f) * 10).append(" об/мин"); }
+        if (elm.volt > 0) { if (eng.length() > 0) eng.append(" · "); eng.append(String.format(Locale.US, "%.1f В", elm.volt)); }
+        elmEng.setText(eng);
+        if (elm.dtcCount > 0 || elm.mil) {
+            elmDtc.setTextColor(0xFFFF5252);
+            elmDtc.setText("Ошибки (" + elm.dtcCount + "): " + (elm.dtc.isEmpty() ? "читаю…" : elm.dtc));
+        } else {
+            elmDtc.setTextColor(0xFF69F0AE);
+            elmDtc.setText("Ошибок нет");
+        }
+    }
+
+    private void elmMenu() {
+        String[] items = {"Выбрать адаптер ELM327", "Переподключить", "Объём двигателя: " + elm.engineL + " л",
+                "Прочитать ошибки", "Сбросить ошибки"};
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("ELM327")
+                .setItems(items, (d, w) -> {
+                    if (w == 0) chooseElm();
+                    else if (w == 1) startElm();
+                    else if (w == 2) chooseEngine();
+                    else if (w == 3) elm.requestDtc();
+                    else new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                            .setTitle("Сбросить ошибки и Check Engine?")
+                            .setPositiveButton("Сбросить", (dd, ww) -> elm.requestClear())
+                            .setNegativeButton("Отмена", null).show();
+                })
+                .setNegativeButton("Закрыть", null).show();
+    }
+
+    @SuppressLint("MissingPermission")
+    private void chooseElm() {
+        try {
+            android.bluetooth.BluetoothAdapter ad = android.bluetooth.BluetoothAdapter.getDefaultAdapter();
+            final List<android.bluetooth.BluetoothDevice> devs = new ArrayList<>(ad == null ? new java.util.HashSet<android.bluetooth.BluetoothDevice>() : ad.getBondedDevices());
+            if (devs.isEmpty()) {
+                Toast.makeText(this, "Сначала свяжите ELM327 в настройках Bluetooth (PIN 1234 или 0000)", Toast.LENGTH_LONG).show();
+                safeStart(Settings.ACTION_BLUETOOTH_SETTINGS);
+                return;
+            }
+            String[] names = new String[devs.size()];
+            for (int i = 0; i < names.length; i++) names[i] = devs.get(i).getName() + "  " + devs.get(i).getAddress();
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Какой это ELM327?")
+                    .setItems(names, (d, w) -> {
+                        prefs.edit().putString("elm_addr", devs.get(w).getAddress()).apply();
+                        startElm();
+                    })
+                    .setNegativeButton("Отмена", null).show();
+        } catch (Throwable t) {
+            Toast.makeText(this, "Нет доступа к Bluetooth", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void chooseEngine() {
+        final float[] v = {1.4f, 1.6f, 1.8f, 2.0f, 2.4f, 2.7f, 3.3f};
+        String[] n = new String[v.length];
+        for (int i = 0; i < v.length; i++) n[i] = v[i] + " л";
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Объём двигателя (нужен, если у машины нет датчика MAF)")
+                .setItems(n, (d, w) -> { elm.engineL = v[w]; prefs.edit().putFloat("eng_l", v[w]).apply(); })
+                .show();
     }
 
     // ---------- логотип Hyundai на фоне = кнопка «все приложения» ----------
@@ -545,7 +665,7 @@ public class MainActivity extends Activity {
                 for (Slot sl : slots) {
                     if (sl.frame.getVisibility() == View.VISIBLE && hit(sl.frame, e)) { confirmRemove(sl); return; }
                 }
-                int[] busy = {R.id.dock, R.id.logo_hit, R.id.pill_wifi, R.id.pill_vpn,
+                int[] busy = {R.id.elm_panel, R.id.dock, R.id.logo_hit, R.id.pill_wifi, R.id.pill_vpn,
                         R.id.btn_bt, R.id.btn_apps, R.id.btn_settings};
                 for (int id : busy) if (hit(findViewById(id), e)) return;
                 addMenu();
@@ -557,7 +677,7 @@ public class MainActivity extends Activity {
                 float dx = e2.getX() - e1.getX(), dy = e2.getY() - e1.getY();
                 if (Math.abs(dx) < 140 || Math.abs(dx) < 2f * Math.abs(dy) || Math.abs(vx) < 300) return false;
                 if (drawer.getVisibility() == View.VISIBLE) return false;
-                int[] busy = {R.id.widget_slot, R.id.widget_slot2, R.id.dock};
+                int[] busy = {R.id.widget_slot, R.id.widget_slot2, R.id.elm_panel, R.id.dock};
                 for (int id : busy) if (hit(findViewById(id), e1)) return false;
                 changeBackground(dx < 0 ? 1 : -1);
                 return true;
@@ -598,7 +718,8 @@ public class MainActivity extends Activity {
         public void onLocationChanged(Location l) {
             lastSpeedFix = System.currentTimeMillis();
             float raw = l.hasSpeed() ? l.getSpeed() * 3.6f : 0f;
-            speedTv.setText(String.valueOf(Math.round(speedCalc.update(raw, lastSpeedFix))));
+            float shown = speedCalc.update(raw, lastSpeedFix);
+            if (elm == null || !elm.fresh()) speedTv.setText(String.valueOf(Math.round(shown)));
         }
         @Override public void onStatusChanged(String p, int s, Bundle e) { }
         @Override public void onProviderEnabled(String p) { }
@@ -607,7 +728,10 @@ public class MainActivity extends Activity {
     private final Runnable speedWatch = new Runnable() {
         @Override
         public void run() {
-            if (System.currentTimeMillis() - lastSpeedFix > 6000) { speedTv.setText("--"); speedCalc.reset(); }
+            if (System.currentTimeMillis() - lastSpeedFix > 6000) {
+                if (elm == null || !elm.fresh()) speedTv.setText("--");
+                speedCalc.reset();
+            }
             handler.postDelayed(this, 2000);
         }
     };
@@ -635,6 +759,7 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         super.onRequestPermissionsResult(code, perms, res);
         if (code == 21) startSpeed();
+        if (code == 22) startElm();
     }
 
     /** Установили/удалили/обновили приложение — обновляем список сразу, без перезапуска лаунчера. */
@@ -649,6 +774,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         try { unregisterReceiver(pkgRx); } catch (Throwable ignore) { }
+        handler.removeCallbacks(elmTick);
+        if (elm != null) elm.stop();
         super.onDestroy();
     }
 
