@@ -240,7 +240,7 @@ public class MainActivity extends Activity {
         final int reqBind, reqCfg;
         final String[] hints;
         FrameLayout box;
-        View add, rm, move, frame;
+        View add, rm, move, frame, size;
         int pendingId = -1;
 
         Slot(String prefKey, String title, int reqBind, int reqCfg, String... hints) {
@@ -267,8 +267,8 @@ public class MainActivity extends Activity {
                 new Slot("widget_id_maps", "Яндекс Навигатора", 503, 504, "yandex.yandexnavi", "yandexnavi", "yandex.navi", "yandex.yandexmaps")
         };
         int[][] ids = {
-                {R.id.widget_host, R.id.widget_add, R.id.widget_remove, R.id.widget_move, R.id.widget_slot},
-                {R.id.widget_host2, R.id.widget_add2, R.id.widget_remove2, R.id.widget_move2, R.id.widget_slot2}
+                {R.id.widget_host, R.id.widget_add, R.id.widget_remove, R.id.widget_move, R.id.widget_slot, R.id.widget_size},
+                {R.id.widget_host2, R.id.widget_add2, R.id.widget_remove2, R.id.widget_move2, R.id.widget_slot2, R.id.widget_size2}
         };
         for (int i = 0; i < slots.length; i++) {
             final Slot s = slots[i];
@@ -277,7 +277,9 @@ public class MainActivity extends Activity {
             s.rm = findViewById(ids[i][2]);
             s.move = findViewById(ids[i][3]);
             s.frame = findViewById(ids[i][4]);
+            s.size = findViewById(ids[i][5]);
             makeDraggable(s);
+            makeResizable(s);
             s.add.setOnClickListener(v -> pickWidget(s));
             showWidget(s);
         }
@@ -307,6 +309,57 @@ public class MainActivity extends Activity {
             }
             return false;
         });
+    }
+
+    /** Угол ⤡: тянем — окно виджета меняет размер, размер запоминается. */
+    private void makeResizable(final Slot s) {
+        final float d = getResources().getDisplayMetrics().density;
+        final float[] st = new float[4];
+        s.size.setOnTouchListener((v, e) -> {
+            View root = findViewById(R.id.root);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    st[0] = e.getRawX(); st[1] = e.getRawY();
+                    st[2] = s.frame.getWidth(); st[3] = s.frame.getHeight();
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float maxW = root.getWidth() - s.frame.getLeft() - s.frame.getTranslationX();
+                    float maxH = root.getHeight() - s.frame.getTop() - s.frame.getTranslationY();
+                    int w = Math.round(Math.max(140 * d, Math.min(maxW, st[2] + e.getRawX() - st[0])));
+                    int h = Math.round(Math.max(100 * d, Math.min(maxH, st[3] + e.getRawY() - st[1])));
+                    ViewGroup.LayoutParams lp = s.frame.getLayoutParams();
+                    lp.width = w; lp.height = h;
+                    s.frame.setLayoutParams(lp);
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    prefs.edit().putInt(s.prefKey + "_w", s.frame.getLayoutParams().width)
+                            .putInt(s.prefKey + "_h", s.frame.getLayoutParams().height).apply();
+                    s.frame.post(() -> pushWidgetSize(s));
+                    return true;
+            }
+            return false;
+        });
+    }
+
+    private void applySavedSize(Slot s) {
+        int w = prefs.getInt(s.prefKey + "_w", 0), h = prefs.getInt(s.prefKey + "_h", 0);
+        if (w <= 0 || h <= 0) return;
+        ViewGroup.LayoutParams lp = s.frame.getLayoutParams();
+        lp.width = w; lp.height = h;
+        s.frame.setLayoutParams(lp);
+    }
+
+    /** Сообщаем самому виджету его новый размер, чтобы он перерисовался под него. */
+    private void pushWidgetSize(Slot s) {
+        if (s.box.getChildCount() == 0) return;
+        View v = s.box.getChildAt(0);
+        if (!(v instanceof AppWidgetHostView)) return;
+        float d = getResources().getDisplayMetrics().density;
+        int w = Math.round(s.box.getWidth() / d), h = Math.round(s.box.getHeight() / d);
+        try { ((AppWidgetHostView) v).updateAppWidgetSize(null, w, h, w, h); } catch (Throwable ignore) { }
     }
 
     private void restorePos(Slot s) {
@@ -372,8 +425,9 @@ public class MainActivity extends Activity {
             });
             s.add.setVisibility(View.GONE);
             s.rm.setVisibility(View.GONE);
+            applySavedSize(s);
             s.frame.setVisibility(View.VISIBLE);
-            s.frame.post(() -> restorePos(s));
+            s.frame.post(() -> { restorePos(s); pushWidgetSize(s); });
         } catch (Throwable t) {
             prefs.edit().remove(s.prefKey).apply();
             s.frame.setVisibility(View.GONE);

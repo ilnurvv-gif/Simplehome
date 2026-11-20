@@ -135,6 +135,17 @@
             android:textSize="15sp" />
 
         <TextView
+            android:id="@+id/widget_size"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/circle_bg"
+            android:gravity="center"
+            android:text="⤡"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+
+        <TextView
             android:id="@+id/widget_remove"
             android:layout_width="34dp"
             android:layout_height="34dp"
@@ -183,6 +194,17 @@
             android:text="✥"
             android:textColor="#FFFFFF"
             android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/widget_size2"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/circle_bg"
+            android:gravity="center"
+            android:text="⤡"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/widget_remove2"
