@@ -150,9 +150,47 @@ public class MainActivity extends Activity {
         View panel = findViewById(R.id.elm_panel);
         panel.setOnClickListener(v -> elmMenu());
         panel.setOnLongClickListener(v -> { elmMenu(); return true; });
+        makeElmDraggable(panel);
         startElm();
         handler.removeCallbacks(elmTick);
         handler.post(elmTick);
+    }
+
+    /** Значок ✥ на панели: тянем — панель двигается, положение запоминается. */
+    private void makeElmDraggable(final View panel) {
+        panel.post(() -> {
+            panel.setTranslationX(prefs.getFloat("elm_tx", 0f));
+            panel.setTranslationY(prefs.getFloat("elm_ty", 0f));
+            clampElm(panel);
+        });
+        final float[] st = new float[4];
+        findViewById(R.id.elm_move).setOnTouchListener((v, e) -> {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    st[0] = e.getRawX(); st[1] = e.getRawY();
+                    st[2] = panel.getTranslationX(); st[3] = panel.getTranslationY();
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    panel.setTranslationX(st[2] + e.getRawX() - st[0]);
+                    panel.setTranslationY(st[3] + e.getRawY() - st[1]);
+                    clampElm(panel);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    prefs.edit().putFloat("elm_tx", panel.getTranslationX())
+                            .putFloat("elm_ty", panel.getTranslationY()).apply();
+                    return true;
+            }
+            return false;
+        });
+    }
+
+    private void clampElm(View f) {
+        View root = findViewById(R.id.root);
+        if (root == null || root.getWidth() == 0 || f.getWidth() == 0) return;
+        f.setTranslationX(Math.max(-f.getLeft(), Math.min(root.getWidth() - f.getRight(), f.getTranslationX())));
+        f.setTranslationY(Math.max(-f.getTop(), Math.min(root.getHeight() - f.getBottom(), f.getTranslationY())));
     }
 
     private void startElm() {
